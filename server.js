@@ -121,10 +121,36 @@ async function fetchMfds(path, params = {}) {
   });
 }
 
+const ignoredIngredientWords = new Set([
+  '밀리그램', '그램', '마이크로그램', '밀리리터', '리터', '퍼센트',
+  'mg', 'g', 'mcg', 'μg', 'ml', 'l', '정', '캡슐', '단위', '분량',
+  '총량', '규격', '비고', '성분정보'
+].map(normalized));
+
+function cleanIngredientName(value) {
+  return stripHtml(value)
+    .replace(/^(?:성분명|주성분명|원료성분명|원료명)\s*[:：]\s*/i, '')
+    .trim();
+}
+
+function isRealIngredientName(value) {
+  const name = cleanIngredientName(value);
+  const key = normalized(name);
+  if (!key || key.length < 2 || ignoredIngredientWords.has(key)) return false;
+  if (/^(?:총량|분량|단위|규격|비고|성분정보)\s*[:：]/i.test(name)) return false;
+  if (/^\d+(?:\.\d+)?(?:밀리그램|그램|마이크로그램|밀리리터|리터|퍼센트|mg|g|mcg|μg|ml|l|%)$/i.test(name.replace(/\s+/g, ''))) return false;
+  return true;
+}
+
 function ingredientParts(record) {
   const names = pick(record, 'MAIN_ITEM_INGR', 'INGR_NAME', 'INGREDIENT', 'INGR_KOR_NAME', 'MATERIAL_NAME');
   const codes = pick(record, 'INGR_CODE', 'INGREDIENT_CODE', 'MAIN_INGR_CODE');
-  const nameList = names.split(/\r?\n|;|\+(?=[^\d])|,(?=[^\d])/).map(stripHtml).filter(Boolean);
+  const labeledNames = [...names.matchAll(/(?:성분명|주성분명|원료성분명)\s*[:：]\s*([^|;\r\n]+)/gi)]
+    .map(match => cleanIngredientName(match[1]))
+    .filter(isRealIngredientName);
+  const nameList = (labeledNames.length
+    ? labeledNames
+    : names.split(/\r?\n|[;|]|\+(?=[^\d])|,(?=[^\d])/).map(cleanIngredientName).filter(isRealIngredientName));
   const codeList = codes.split(/[,;\s]+/).map(text).filter(Boolean);
   const length = Math.max(nameList.length, codeList.length);
   return Array.from({ length }, (_, index) => ({ name: nameList[index] || '', code: codeList[index] || '' }))
@@ -237,8 +263,12 @@ async function generateWithRetry(ai, request) {
 
 const ingredientKey = ingredient => {
   if (ingredient.code) return `code:${normalized(ingredient.code)}`;
-  const withoutDose = ingredient.name.replace(/\d+(?:\.\d+)?\s*(?:mg|mcg|μg|g|ml|%|정|캡슐)/gi, ' ');
-  return `name:${normalized(withoutDose)}`;
+  if (!isRealIngredientName(ingredient.name)) return '';
+  const withoutDose = cleanIngredientName(ingredient.name)
+    .replace(/\d+(?:\.\d+)?\s*(?:mg|mcg|μg|g|ml|%|밀리그램|그램|마이크로그램|밀리리터|리터|퍼센트|정|캡슐)/gi, ' ');
+  const key = normalized(withoutDose);
+  if (!key || ignoredIngredientWords.has(key)) return '';
+  return `name:${key}`;
 };
 
 function duplicateIngredientWarnings(medicines) {
