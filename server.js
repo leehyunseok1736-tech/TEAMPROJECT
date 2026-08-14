@@ -9,8 +9,8 @@ const port = process.env.PORT || 3000;
 const indexHtml = readFileSync(new URL('./index.html', import.meta.url), 'utf8');
 const MFDS_BASE_URL = process.env.MFDS_BASE_URL || 'https://apis.data.go.kr/1471000';
 const MFDS_PATHS = {
-  product: process.env.MFDS_PRODUCT_PATH || '/DrugPrdtPrmsnInfoService06/getDrugPrdtPrmsnDtlInq06',
-  durProduct: process.env.MFDS_DUR_PRODUCT_PATH || '/DURPrdlstInfoService03/getDurPrdlstInfoList3',
+  product: process.env.MFDS_PRODUCT_PATH || '/DrugPrdtPrmsnInfoService07/getDrugPrdtPrmsnInq07',
+  durProduct: process.env.MFDS_DUR_PRODUCT_PATH || '/DURPrdlstInfoService03/getDurPrdlstInfoList03',
   interaction: process.env.MFDS_DUR_INTERACTION_PATH || '/DURPrdlstInfoService03/getUsjntTabooInfoList03',
   efficacyDuplicate: process.env.MFDS_DUR_DUPLICATE_PATH || '/DURPrdlstInfoService03/getEfcyDplctInfoList03',
   elderly: process.env.MFDS_DUR_ELDERLY_PATH || '/DURPrdlstInfoService03/getOdsnAtentInfoList03'
@@ -55,7 +55,10 @@ const cache = new Map();
 const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 const text = value => String(value ?? '').trim();
 const stripHtml = value => text(value).replace(/<[^>]*>/g, ' ').replace(/&nbsp;|&#160;/gi, ' ').replace(/\s+/g, ' ').trim();
-const normalized = value => stripHtml(value).toLowerCase().replace(/[^0-9a-z가-힣]/g, '');
+const normalized = value => stripHtml(value)
+  .toLowerCase()
+  .replace(/(\d+(?:\.\d+)?)\s*mg\b/g, '$1밀리그램')
+  .replace(/[^0-9a-z가-힣]/g, '');
 const keyName = value => String(value).toLowerCase().replace(/[^a-z0-9]/g, '');
 
 function pick(record, ...names) {
@@ -162,16 +165,40 @@ function mergeProducts(...groups) {
   return [...merged.values()];
 }
 
+function medicineNameVariants(value) {
+  const original = text(value);
+  if (!original || original === '확인 필요') return [];
+  const compact = original.replace(/\s+/g, '');
+  const koreanUnit = compact.replace(/(\d+(?:\.\d+)?)mg(?=$|[^a-z])/gi, '$1밀리그램');
+  const baseName = koreanUnit
+    .replace(/\d+(?:\.\d+)?밀리그램.*$/i, '')
+    .replace(/\([^)]*\).*$/, '');
+  return [...new Set([original, koreanUnit, baseName].map(text).filter(Boolean))];
+}
+
 async function searchProducts(name, itemCode = '') {
   const queryName = text(name) === '확인 필요' ? '' : text(name);
   const queryCode = text(itemCode) === '확인 필요' ? '' : text(itemCode);
   if (!queryName && !queryCode) return [];
-  const calls = [
-    fetchMfds(MFDS_PATHS.product, { item_name: queryName, item_seq: queryCode }).catch(() => []),
-    fetchMfds(MFDS_PATHS.durProduct, { itemName: queryName, itemSeq: queryCode }).catch(() => [])
-  ];
-  const products = mergeProducts(...await Promise.all(calls));
-  return products.map(product => ({ ...product, score: queryCode && product.itemSeq === queryCode ? 110 : productScore(queryName, product) }))
+  const variants = medicineNameVariants(queryName);
+  const groups = [];
+
+  for (const variant of variants.length ? variants : ['']) {
+    const results = await Promise.all([
+      fetchMfds(MFDS_PATHS.product, { item_name: variant, prdlst_Stdr_code: queryCode }).catch(() => []),
+      fetchMfds(MFDS_PATHS.durProduct, { itemName: variant, itemSeq: queryCode }).catch(() => [])
+    ]);
+    groups.push(...results);
+    if (mergeProducts(...groups).length) break;
+  }
+
+  const products = mergeProducts(...groups);
+  return products.map(product => ({
+    ...product,
+    score: queryCode && product.itemSeq === queryCode
+      ? 110
+      : Math.max(0, ...variants.map(variant => productScore(variant, product)))
+  }))
     .filter(product => product.score > 0 || (queryCode && product.itemSeq === queryCode))
     .sort((a, b) => b.score - a.score)
     .slice(0, 5);
