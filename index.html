@@ -3,6 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#19755d" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/icons/app-icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/icons/app-icon.svg" />
   <title>약속시간 | 나의 복약 시간표</title>
   <style>
     :root { --ink:#1d2a3a; --muted:#64748b; --paper:#fffdfa; --bg:#f4f7f5; --green:#19755d; --mint:#dff5e8; --red:#a53d36; --redbg:#fff0ef; --orange:#9a541b; --orangebg:#fff4e8; --line:#e0e8e3; --shadow:0 16px 45px rgba(30,65,50,.10); }
@@ -10,9 +16,19 @@
     body { margin:0; font-family:"Pretendard","Noto Sans KR",system-ui,sans-serif; color:var(--ink); background:radial-gradient(circle at 0 0,#e1f3e7 0,transparent 32%),var(--bg); min-height:100vh; }
     button,input,select { font:inherit; }
     header { max-width:1180px; margin:auto; padding:32px 24px 18px; display:flex; align-items:center; justify-content:space-between; }
-    .brand { display:flex; align-items:center; gap:10px; font-weight:800; font-size:20px; }
-    .brand-mark { width:36px; height:36px; border-radius:12px; display:grid; place-items:center; background:var(--green); color:white; font-size:23px; }
+    .brand { display:flex; align-items:center; gap:10px; font-weight:900; font-size:21px; letter-spacing:-1px; }
+    .brand-mark { width:39px; height:39px; border-radius:13px; display:flex; align-items:center; justify-content:center; overflow:hidden; background:#f1faf4; border:1px solid #c6e5d1; transform:rotate(-10deg); box-shadow:0 4px 10px #19755d1f; }
+    .capsule { width:25px; height:14px; border-radius:999px; overflow:hidden; display:flex; border:1.5px solid var(--green); background:white; }
+    .capsule-half { width:50%; height:100%; }
+    .capsule-half:first-child { background:var(--green); position:relative; }
+    .capsule-half:first-child:after { content:"+"; position:absolute; color:white; font-size:12px; font-weight:900; line-height:12px; left:3px; top:0; transform:rotate(10deg); }
+    .capsule-half:last-child { background:#f7b26e; }
+    .brand-name strong { color:var(--green); }
+    .brand-name small { display:block; margin-top:1px; color:#7c8c83; font-size:9px; font-weight:750; letter-spacing:.2px; }
     .tag { color:var(--green); background:var(--mint); padding:7px 12px; border-radius:999px; font-size:12px; font-weight:700; }
+    .header-actions { display:flex; align-items:center; gap:8px; }
+    .install-app { display:none; border:1px solid var(--green); color:var(--green); background:#fff; border-radius:999px; padding:7px 11px; cursor:pointer; font-size:12px; font-weight:800; }
+    .install-app.show { display:block; }
     main { max-width:1180px; margin:0 auto; padding:15px 24px 60px; }
     .intro { margin:20px 0 28px; }
     h1 { font-size:clamp(30px,5vw,45px); letter-spacing:-2.3px; margin:0 0 11px; line-height:1.2; }
@@ -74,7 +90,17 @@
     .schedule-card { position:sticky; top:16px; }
     .actions { display:flex; justify-content:flex-end; }
     .clear { border:0; background:none; color:var(--muted); font-size:12px; cursor:pointer; text-decoration:underline; }
+    .date-navigator { display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:8px; align-items:center; margin:-4px 0 9px; }
+    .date-nav-button,.today-button { border:1px solid #cfe2d6; border-radius:10px; padding:9px 10px; background:#fff; color:var(--green); cursor:pointer; font-size:12px; font-weight:800; white-space:nowrap; }
+    .date-nav-button { min-width:37px; font-size:17px; line-height:1; }
+    .date-navigator input { padding:9px; text-align:center; font-size:13px; }
+    .date-summary { margin:0 0 15px; color:var(--muted); font-size:12px; line-height:1.45; }
     .safety-panel { margin-bottom:20px; border:1px solid #dbe8df; border-radius:16px; padding:15px; background:#f9fcfa; }
+    .reminder-panel { margin-bottom:14px; border:1px solid #d7e9df; border-radius:16px; padding:15px; background:#f6fcf8; }
+    .reminder-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:7px; }
+    .reminder-status { color:var(--muted); font-size:11px; line-height:1.5; }
+    .reminder-button { margin-top:11px; border:0; border-radius:10px; padding:9px 11px; background:var(--green); color:#fff; cursor:pointer; font-size:12px; font-weight:800; }
+    .reminder-button:disabled { opacity:.55; cursor:not-allowed; }
     .safety-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:7px; }
     .safety-status { color:var(--muted); font-size:11px; line-height:1.45; }
     .warning-list { display:grid; gap:9px; margin-top:11px; }
@@ -94,6 +120,13 @@
     .medicine strong { font-size:14px; }
     .medicine small { color:var(--muted); font-size:11px; margin-top:2px; line-height:1.4; }
     .delete { border:0; background:transparent; color:#ad5a52; cursor:pointer; font-size:18px; padding:4px; }
+    .medicine-actions { display:flex; align-items:center; gap:5px; flex-shrink:0; }
+    .dose-button { border:1px solid #cfe2d6; border-radius:8px; background:#fff; color:var(--green); padding:6px 8px; cursor:pointer; font-size:11px; font-weight:800; }
+    .dose-button.skip { border-color:#ead4bd; color:#a35c25; }
+    .dose-button.undo { border-color:#d4dce8; color:var(--muted); }
+    .dose-state { display:inline-flex; align-items:center; border-radius:999px; padding:4px 7px; font-size:10px; font-weight:800; white-space:nowrap; }
+    .dose-state.taken { color:var(--green); background:var(--mint); }
+    .dose-state.skipped { color:#a35c25; background:var(--orangebg); }
     .notice { margin-top:14px; background:var(--orangebg); border-radius:12px; padding:11px 13px; color:var(--orange); font-size:12px; line-height:1.5; display:none; }
     .notice.show { display:block; }
     footer { text-align:center; color:#7b8781; font-size:11px; padding:0 20px 30px; line-height:1.6; }
@@ -102,7 +135,7 @@
   </style>
 </head>
 <body>
-  <header><div class="brand"><span class="brand-mark">✚</span>약속시간</div><span class="tag">공식 정보로 한 번 더 확인</span></header>
+  <header><div class="brand" aria-label="약속시간, 나의 복약 도우미"><span class="brand-mark" aria-hidden="true"><span class="capsule"><span class="capsule-half"></span><span class="capsule-half"></span></span></span><span class="brand-name"><strong>약</strong>속시간<small>나의 복약 도우미</small></span></div><div class="header-actions"><button class="install-app" id="installApp" type="button">앱 설치</button><span class="tag">공식 정보로 한 번 더 확인</span></div></header>
   <main>
     <section class="intro"><h1>여러 약도 한눈에,<br>놓치지 않도록.</h1><p>처방전 사진을 읽고 식약처 품목·DUR 정보와 연결해 복약 시간표와 주의사항을 정리합니다.</p></section>
     <div class="grid">
@@ -133,6 +166,7 @@
           <h2 id="manualInputTitle">직접 입력</h2>
           <form id="medForm">
             <div class="form-row"><div><label for="name">약 이름</label><input id="name" required placeholder="제품명을 정확히 입력"></div><div><label for="amount">1회 복용량</label><input id="amount" placeholder="예: 1정"></div></div>
+            <div class="form-row"><div><label for="startDate">복용 시작일</label><input id="startDate" type="date"></div><div><label for="durationDays">복용 기간</label><input id="durationDays" type="number" min="1" inputmode="numeric" placeholder="예: 3일"></div></div>
             <label>복용 기준</label>
             <div class="mode" id="modeButtons"><button type="button" class="active" data-mode="meal">식사 기준</button><button type="button" data-mode="interval">시간 간격</button><button type="button" data-mode="custom">직접 입력</button></div>
             <div class="conditional show" id="meal"><label for="mealCount">하루 복용 횟수</label><select id="mealCount"><option value="1">하루 1회 (아침 식후)</option><option value="2">하루 2회 (아침·저녁 식후)</option><option value="3" selected>하루 3회 (매 식후)</option></select></div>
@@ -146,7 +180,10 @@
 
       <section class="card schedule-card">
         <div class="actions"><button class="clear" id="clear">전체 지우기</button></div>
-        <h2>오늘의 복약 시간표</h2>
+        <h2 id="scheduleHeading">오늘의 복약 시간표</h2>
+        <div class="date-navigator" aria-label="복약 날짜 선택"><button class="date-nav-button" id="previousDate" type="button" aria-label="이전 날짜">‹</button><input id="scheduleDate" type="date" aria-label="복약 날짜"><button class="date-nav-button" id="nextDate" type="button" aria-label="다음 날짜">›</button></div>
+        <p class="date-summary" id="dateSummary"></p>
+        <section class="reminder-panel" aria-labelledby="reminderTitle"><div class="reminder-head"><h3 id="reminderTitle">복약 알림</h3><span class="match-badge">앱 실행 중</span></div><div class="reminder-status" id="reminderStatus">알림을 허용하면 복용 30분 전·정시·30분 후에 알려 드립니다.</div><button class="reminder-button" id="enableReminders" type="button">알림 허용하기</button></section>
         <section class="safety-panel" aria-labelledby="safetyTitle"><div class="safety-head"><h3 id="safetyTitle">성분 중복·DUR 점검</h3><span class="match-badge" id="safetyBadge">대기</span></div><div class="safety-status" id="safetyStatus">약을 추가하면 식약처 정보를 조회합니다.</div><div class="warning-list" id="warningList"></div></section>
         <div id="schedule"><div class="empty"><div class="circle">◷</div><strong>아직 등록한 약이 없어요</strong><br><span>왼쪽에서 복약 정보를 추가해 보세요.</span></div></div>
         <div class="notice" id="notice"></div>
@@ -161,13 +198,32 @@
     const form=$('#medForm'), schedule=$('#schedule'), notice=$('#notice');
     const photoInput=$('#medicinePhoto'), photoList=$('#photoList'), photoCount=$('#photoCount'), analyzeButton=$('#analyzePhotos'), analysisStatus=$('#analysisStatus'), analysisResults=$('#analysisResults');
     const warningList=$('#warningList'), safetyStatus=$('#safetyStatus'), safetyBadge=$('#safetyBadge');
+    const reminderStatus=$('#reminderStatus'), enableReminders=$('#enableReminders');
+    const scheduleDate=$('#scheduleDate'), scheduleHeading=$('#scheduleHeading'), dateSummary=$('#dateSummary');
     const unknown='확인 필요';
     const escapeHtml=value=>String(value??'').replace(/[&<>'"]/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
     const validTime=value=>/^([01]\d|2[0-3]):[0-5]\d$/.test(value);
     const toMin=time=>{const [hour,minute]=time.split(':').map(Number);return hour*60+minute};
     const toTime=minutes=>{const safe=(minutes+1440)%1440;return String(Math.floor(safe/60)).padStart(2,'0')+':'+String(safe%60).padStart(2,'0')};
+    const dateKey=date=>{const year=date.getFullYear(),month=String(date.getMonth()+1).padStart(2,'0'),day=String(date.getDate()).padStart(2,'0');return year+'-'+month+'-'+day};
+    const todayKey=()=>dateKey(new Date());
+    const dateFromKey=value=>new Date(value+'T00:00:00');
+    const addDays=(value,days)=>{const date=dateFromKey(value);date.setDate(date.getDate()+days);return dateKey(date)};
+    const durationFromText=value=>{const match=String(value||'').match(/(\d+)\s*일/);return match?Math.max(0,Number(match[1])):0};
+    const dateLabel=value=>dateFromKey(value).toLocaleDateString('ko-KR',{month:'long',day:'numeric',weekday:'short'});
     const storedProfile=JSON.parse(localStorage.getItem('yakSoksiganProfile')||'{}');
-    let mode='meal', meds=JSON.parse(localStorage.getItem('yakSoksigan')||'[]'), photos=[], analyzedMedicines=[], safetyTimer, safetyVersion=0;
+    let mode='meal', meds=JSON.parse(localStorage.getItem('yakSoksigan')||'[]'), photos=[], analyzedMedicines=[], safetyTimer, safetyVersion=0, reminderTimer, lastReminderCheck=Date.now();
+    let selectedDate=localStorage.getItem('yakSoksiganSelectedDate')||todayKey();
+    let doseRecords=JSON.parse(localStorage.getItem('yakSoksiganDoseRecords')||'{}');
+    const deliveredReminderIds=new Set(JSON.parse(sessionStorage.getItem('yakSoksiganReminderIds')||'[]'));
+
+    let migrated=false;
+    meds.forEach(med=>{if(!med.startDate){med.startDate=todayKey();migrated=true}if(!Number.isFinite(Number(med.durationDays))) {med.durationDays=durationFromText(med.duration||med.label);migrated=true}});
+    if(migrated)localStorage.setItem('yakSoksigan',JSON.stringify(meds));
+    function activeOnDate(med,value){const start=med.startDate||todayKey();if(value<start)return false;const days=Number(med.durationDays)||0;return !days||value<=addDays(start,days-1)}
+    function activeMeds(value=selectedDate){return meds.filter(med=>activeOnDate(med,value))}
+    function doseKey(med,time,value=selectedDate){return value+'-'+med.id+'-'+time}
+    function periodDescription(med){const start=med.startDate||todayKey(),days=Number(med.durationDays)||0;return days?'복용 기간: '+start+' ~ '+addDays(start,days-1):'복용 시작일: '+start+' · 종료일 미입력'}
 
     ['patientAge','breakfastTime','lunchTime','dinnerTime'].forEach(id=>{if(storedProfile[id])$('#'+id).value=storedProfile[id];$('#'+id).addEventListener('change',()=>{saveProfile();queueSafetyCheck()})});
     function profile(){return{patientAge:$('#patientAge').value,breakfastTime:$('#breakfastTime').value,lunchTime:$('#lunchTime').value,dinnerTime:$('#dinnerTime').value}}
@@ -194,9 +250,9 @@
       analyzedMedicines=Array.isArray(data.medicines)?data.medicines:[];
       if(!analyzedMedicines.length){analysisResults.innerHTML='<p class="analysis-status">사진에서 복약 정보를 읽지 못했습니다. 직접 입력해 주세요.</p>';return}
       analysisResults.innerHTML=analyzedMedicines.map((med,index)=>{
-        const suggestion=suggestedTimes(med);const matches=med.matches||[];const selected=med.matched_product?.itemSeq||'';
-        const options='<option value="">'+(matches.length?'실제 약과 같은 품목을 선택하세요':'식약처 후보 없음')+'</option>'+matches.map((item,itemIndex)=>'<option value="'+itemIndex+'" '+((item.itemSeq||'')===selected?'selected':'')+'>'+escapeHtml(item.name)+' · '+escapeHtml(item.manufacturer||'업체 미표기')+'</option>').join('');
-        return '<article class="analysis-result" data-index="'+index+'"><div class="analysis-result-head"><h3>인식 결과 '+(index+1)+'</h3><span class="match-badge '+(med.matched_product?'exact':'')+'">'+(med.matched_product?'정확 일치':'확인 필요')+'</span></div><div class="analysis-result-grid"><label class="full">식약처 공식 품목<select data-field="product">'+options+'</select></label><label>사진에서 읽은 약 이름<input data-field="name" value="'+escapeHtml(med.name)+'"></label><label>1회 복용량<input data-field="amount" value="'+escapeHtml(med.amount_per_dose)+'"></label><label>하루 복용 횟수<input data-field="frequency" value="'+escapeHtml(med.frequency_per_day)+'"></label><label>식전/식후<input data-field="mealTiming" value="'+escapeHtml(med.meal_timing)+'"></label><label class="full">복용 시간 (쉼표로 구분)<input data-field="times" value="'+escapeHtml(suggestion.times.join(', '))+'"></label><label class="full">처방 기간<input data-field="duration" value="'+escapeHtml(med.duration)+'"></label><div class="official-box">'+escapeHtml(med.verification_message)+'<br>시간 기준: '+escapeHtml(suggestion.source)+'</div></div><button class="apply-analysis" type="button">확인한 정보로 시간표에 추가</button></article>';
+        const suggestion=suggestedTimes(med);const matches=med.matches||[];const topScore=matches[0]?.score||0;
+        const options='<option value="" selected>'+((matches.length?'사진 속 약과 같은 공식 품목을 직접 선택하세요':'식약처 후보 없음'))+'</option>'+matches.map((item,itemIndex)=>'<option value="'+itemIndex+'">['+item.score+'점] '+escapeHtml(item.name)+' · '+escapeHtml(item.manufacturer||'업체 미표기')+(item.reasons?.length?' ('+escapeHtml(item.reasons.join(', '))+')':'')+'</option>').join('');
+        return '<article class="analysis-result" data-index="'+index+'"><div class="analysis-result-head"><h3>인식 결과 '+(index+1)+'</h3><span class="match-badge '+(topScore>=80?'exact':'')+'">'+(topScore?topScore+'점 후보':'후보 없음')+'</span></div><div class="analysis-result-grid"><label class="full">식약처 공식 품목<select data-field="product">'+options+'</select></label><label>사진에서 읽은 약 이름<input data-field="name" value="'+escapeHtml(med.name)+'"></label><label>사진 속 제조사<input data-field="manufacturer" value="'+escapeHtml(med.manufacturer)+'"></label><label>사진 속 제형<input data-field="dosageForm" value="'+escapeHtml(med.dosage_form)+'"></label><label>식별문자/각인<input data-field="imprint" value="'+escapeHtml(med.imprint)+'"></label><label>1회 복용량<input data-field="amount" value="'+escapeHtml(med.amount_per_dose)+'"></label><label>하루 복용 횟수<input data-field="frequency" value="'+escapeHtml(med.frequency_per_day)+'"></label><label>식전/식후<input data-field="mealTiming" value="'+escapeHtml(med.meal_timing)+'"></label><label class="full">복용 시간 (쉼표로 구분)<input data-field="times" value="'+escapeHtml(suggestion.times.join(', '))+'"></label><label class="full">처방 기간<input data-field="duration" value="'+escapeHtml(med.duration)+'"></label><div class="official-box">'+escapeHtml(med.verification_message)+'<br>점수는 약 이름·제조사·제형 등의 텍스트 유사도이며, 동일 약을 보장하지 않습니다.<br>시간 기준: '+escapeHtml(suggestion.source)+'</div></div><button class="apply-analysis" type="button">확인한 정보로 시간표에 추가</button></article>';
       }).join('');
       $$('.apply-analysis').forEach(button=>button.onclick=()=>applyAnalysis(button.closest('.analysis-result')));
     }
@@ -207,7 +263,8 @@
       if((source.matches||[]).length&&!product){alert('약 봉투와 같은 식약처 공식 품목을 먼저 선택해 주세요.');return}
       const name=product?.name||get('name');const times=get('times').split(',').map(value=>value.trim()).filter(validTime);
       if(!name||name===unknown){alert('약 이름을 확인해 입력해 주세요.');return}if(!times.length){alert('복용 시간을 HH:MM 형식으로 확인해 주세요.');return}
-      meds.push({id:Date.now()+Math.random(),name,amount:get('amount')||unknown,times,label:[get('mealTiming'),get('frequency'),get('duration')].filter(value=>value&&value!==unknown).join(' · ')||unknown,product,scheduleSource:(source.times||[]).length?'처방전 표기':'기본 식사시간 자동 제안'});
+      const duration=get('duration');
+      meds.push({id:Date.now()+Math.random(),name,amount:get('amount')||unknown,times,label:[get('mealTiming'),get('frequency'),duration].filter(value=>value&&value!==unknown).join(' · ')||unknown,product,startDate:todayKey(),durationDays:durationFromText(duration),duration,scheduleSource:(source.times||[]).length?'처방전 표기':'기본 식사시간 자동 제안'});
       save();card.querySelector('.apply-analysis').textContent='시간표에 추가됨';card.querySelector('.apply-analysis').disabled=true;
     }
 
@@ -221,11 +278,15 @@
     function timesFor(){if(mode==='meal'){const count=+$('#mealCount').value;const base=[profile().breakfastTime,profile().lunchTime,profile().dinnerTime];const chosen=count===1?[base[0]]:count===2?[base[0],base[2]]:base;return chosen.filter(validTime).map(time=>toTime(toMin(time)+30))}if(mode==='interval'){const start=toMin($('#startTime').value),gap=+$('#intervalHours').value*60;return Array.from({length:Math.floor(1440/gap)},(_,index)=>toTime(start+index*gap))}return $$('#custom input').map(input=>input.value).filter(validTime)}
 
     function render(){
-      const slots={};meds.forEach(med=>{med.id=med.id||Date.now()+Math.random();(med.times||[]).forEach(time=>(slots[time]??=[]).push(med))});const ordered=Object.keys(slots).sort((a,b)=>toMin(a)-toMin(b));
-      if(!ordered.length)schedule.innerHTML='<div class="empty"><div class="circle">◷</div><strong>아직 등록한 약이 없어요</strong><br><span>왼쪽에서 복약 정보를 추가해 보세요.</span></div>';
-      else schedule.innerHTML='<div class="timeline">'+ordered.map(time=>'<div class="slot"><div class="slot-time">'+time+'</div>'+slots[time].map(item=>'<div class="medicine"><div><strong>'+escapeHtml(item.name)+'</strong><small>'+escapeHtml(item.amount||'복용량 미입력')+' · '+escapeHtml(item.label||'')+(item.scheduleSource?'<br>'+escapeHtml(item.scheduleSource):'')+'</small></div><button class="delete" aria-label="삭제" data-id="'+item.id+'">×</button></div>').join('')+'</div>').join('')+'</div>';
+      scheduleDate.value=selectedDate;scheduleHeading.textContent=selectedDate===todayKey()?'오늘의 복약 시간표':dateLabel(selectedDate)+' 복약 시간표';
+      const active=activeMeds();const slots={};active.forEach(med=>{med.id=med.id||Date.now()+Math.random();(med.times||[]).forEach(time=>(slots[time]??=[]).push(med))});const ordered=Object.keys(slots).sort((a,b)=>toMin(a)-toMin(b));
+      const completed=Object.entries(doseRecords).filter(([key,record])=>key.startsWith(selectedDate+'-')&&record.status==='taken').length;
+      dateSummary.textContent=active.length?active.length+'개 약이 복용 기간 중입니다 · 복용 완료 '+completed+'건':'이 날짜에는 복용 기간 중인 약이 없습니다.';
+      if(!ordered.length)schedule.innerHTML='<div class="empty"><div class="circle">◷</div><strong>'+escapeHtml(dateLabel(selectedDate))+'에는 등록된 복약이 없어요</strong><br><span>다른 날짜를 확인하거나 왼쪽에서 약을 추가해 보세요.</span></div>';
+      else schedule.innerHTML='<div class="timeline">'+ordered.map(time=>'<div class="slot"><div class="slot-time">'+time+'</div>'+slots[time].map(item=>{const key=doseKey(item,time),record=doseRecords[key],state=record?.status;const actions=state?'<span class="dose-state '+(state==='taken'?'taken':'skipped')+'">'+(state==='taken'?'복용 완료':'건너뜀')+'</span><button class="dose-button undo" type="button" data-dose-key="'+key+'" data-dose-status="clear">되돌리기</button>':'<button class="dose-button" type="button" data-dose-key="'+key+'" data-dose-status="taken">복용함</button><button class="dose-button skip" type="button" data-dose-key="'+key+'" data-dose-status="skipped">건너뜀</button>';return '<div class="medicine"><div><strong>'+escapeHtml(item.name)+'</strong><small>'+escapeHtml(item.amount||'복용량 미입력')+' · '+escapeHtml(item.label||'')+(item.scheduleSource?'<br>'+escapeHtml(item.scheduleSource):'')+'<br>'+escapeHtml(periodDescription(item))+'</small></div><div class="medicine-actions">'+actions+'<button class="delete" aria-label="약 삭제" data-id="'+item.id+'">×</button></div></div>'}).join('')+'</div>').join('')+'</div>';
       const close=ordered.some((time,index)=>index&&toMin(time)-toMin(ordered[index-1])<60);notice.textContent=close?'복용 시간이 1시간 이내로 가까운 항목이 있습니다. 이것만으로 상호작용을 판단할 수 없으니 처방 지시를 다시 확인하세요.':'';notice.classList.toggle('show',close);
       $$('.delete').forEach(button=>button.onclick=()=>{meds=meds.filter(med=>med.id!==+button.dataset.id);save()});
+      $$('[data-dose-key]').forEach(button=>button.onclick=()=>{const key=button.dataset.doseKey,status=button.dataset.doseStatus;if(status==='clear')delete doseRecords[key];else doseRecords[key]={status,updatedAt:new Date().toISOString()};localStorage.setItem('yakSoksiganDoseRecords',JSON.stringify(doseRecords));render()});
     }
 
     function renderSafety(data){
@@ -237,16 +298,40 @@
     }
 
     async function checkSafety(){
-      const version=++safetyVersion;if(!meds.length){safetyBadge.textContent='대기';safetyBadge.className='match-badge';safetyStatus.textContent='약을 추가하면 식약처 정보를 조회합니다.';warningList.innerHTML='';return}
+      const version=++safetyVersion, active=activeMeds();if(!active.length){safetyBadge.textContent='대기';safetyBadge.className='match-badge';safetyStatus.textContent=dateLabel(selectedDate)+'에는 점검할 복용 약이 없습니다.';warningList.innerHTML='';return}
       safetyBadge.textContent='조회 중';safetyStatus.textContent='식약처 품목·DUR 정보를 확인하고 있습니다…';warningList.innerHTML='';
-      try{const response=await fetch('/api/check-safety',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({age:Number(profile().patientAge),medicines:meds.map(({id,name,product})=>({id,name,itemSeq:product?.itemSeq,product}))})});const data=await response.json();if(version!==safetyVersion)return;if(!response.ok)throw new Error(data.error||'안전정보 조회 실패');(data.medicines||[]).forEach(result=>{const med=meds.find(item=>String(item.id)===String(result.id));if(med&&result.product)med.product=result.product});localStorage.setItem('yakSoksigan',JSON.stringify(meds));renderSafety(data)}catch(error){if(version!==safetyVersion)return;safetyBadge.textContent='확인 실패';safetyBadge.className='match-badge';safetyStatus.textContent=error.message;warningList.innerHTML='<article class="warning"><strong>전문가 확인이 필요합니다</strong>공식 데이터 조회가 끝나지 않았으므로 이 화면을 안전 판정으로 사용하지 마세요.</article>'}
+      try{const response=await fetch('/api/check-safety',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({age:Number(profile().patientAge),medicines:active.map(({id,name,product})=>({id,name,itemSeq:product?.itemSeq,product}))})});const data=await response.json();if(version!==safetyVersion)return;if(!response.ok)throw new Error(data.error||'안전정보 조회 실패');(data.medicines||[]).forEach(result=>{const med=meds.find(item=>String(item.id)===String(result.id));if(med&&result.product)med.product=result.product});localStorage.setItem('yakSoksigan',JSON.stringify(meds));renderSafety(data)}catch(error){if(version!==safetyVersion)return;safetyBadge.textContent='확인 실패';safetyBadge.className='match-badge';safetyStatus.textContent=error.message;warningList.innerHTML='<article class="warning"><strong>전문가 확인이 필요합니다</strong>공식 데이터 조회가 끝나지 않았으므로 이 화면을 안전 판정으로 사용하지 마세요.</article>'}
     }
     function queueSafetyCheck(){clearTimeout(safetyTimer);safetyTimer=setTimeout(checkSafety,350)}
-    function save(){localStorage.setItem('yakSoksigan',JSON.stringify(meds));render();queueSafetyCheck()}
+    function save(){localStorage.setItem('yakSoksigan',JSON.stringify(meds));render();queueSafetyCheck();lastReminderCheck=Date.now()}
 
-    form.addEventListener('submit',event=>{event.preventDefault();const name=$('#name').value.trim(),amount=$('#amount').value.trim(),times=timesFor();if(!name||!times.length)return;const labels={meal:'식후 자동 제안',interval:'정해진 간격',custom:'직접 지정'};meds.push({id:Date.now()+Math.random(),name,amount,times,label:labels[mode],product:null,scheduleSource:'직접 입력'});save();form.reset();mode='meal';$$('.mode button').forEach((button,index)=>button.classList.toggle('active',index===0));$$('.conditional').forEach((section,index)=>section.classList.toggle('show',index===0));$('#mealCount').value='3';$('#startTime').value='08:00';$$('#custom input').forEach((input,index)=>input.value=['08:00','13:00','20:00'][index]);$('#name').focus()});
+    function updateReminderUi(){
+      if(!('Notification' in window)){reminderStatus.textContent='이 브라우저는 알림을 지원하지 않습니다.';enableReminders.disabled=true;return}
+      if(Notification.permission==='granted'){reminderStatus.textContent='알림이 허용되었습니다. 앱을 열어 둔 동안 30분 전·정시·30분 후에 알려 드립니다.';enableReminders.textContent='알림 허용됨';enableReminders.disabled=true;return}
+      if(Notification.permission==='denied'){reminderStatus.textContent='브라우저에서 알림을 차단했습니다. 브라우저 사이트 설정에서 알림을 허용해 주세요.';enableReminders.textContent='알림 차단됨';enableReminders.disabled=true;return}
+      reminderStatus.textContent='알림을 허용하면 복용 30분 전·정시·30분 후에 알려 드립니다.';enableReminders.textContent='알림 허용하기';enableReminders.disabled=false;
+    }
+    async function requestReminderPermission(){if(!('Notification' in window))return;await Notification.requestPermission();updateReminderUi()}
+    function reminderTitle(phase){return phase==='before'?'복약 30분 전':phase==='now'?'복약 시간':'복약 확인'}
+    function reminderBody(phase,names){const medicineNames=[...new Set(names)].join(', ');return phase==='before'?medicineNames+' 복용까지 30분 남았어요.':phase==='now'?medicineNames+'을(를) 복용할 시간이에요.':medicineNames+' 복용 여부를 확인해 주세요.'}
+    async function showReminder(phase,names){const title=reminderTitle(phase),body=reminderBody(phase,names);reminderStatus.textContent='방금 알림: '+title+' · '+body;if(navigator.serviceWorker?.controller){const registration=await navigator.serviceWorker.ready;return registration.showNotification(title,{body,icon:'/icons/app-icon.svg',tag:'yak-soksigan-'+phase,renotify:true})}new Notification(title,{body,icon:'/icons/app-icon.svg'})}
+    function checkReminders(){if(!('Notification' in window)||Notification.permission!=='granted'||!meds.length){lastReminderCheck=Date.now();return}const now=Date.now(),from=Math.max(lastReminderCheck,now-120000),events=new Map();for(const dayOffset of [-1,0,1]){const date=new Date(now);date.setDate(date.getDate()+dayOffset);for(const med of activeMeds(dateKey(date))){for(const time of med.times||[]){if(!validTime(time))continue;const [hour,minute]=time.split(':').map(Number);for(const [phase,offset] of [['before',-30],['now',0],['after',30]]){const target=new Date(date);target.setHours(hour,minute+offset,0,0);const timestamp=target.getTime();if(timestamp>from&&timestamp<=now){const key=timestamp+'-'+phase;if(!events.has(key))events.set(key,{phase,names:[],id:key});events.get(key).names.push(med.name)}}}}}lastReminderCheck=now;for(const event of events.values()){if(deliveredReminderIds.has(event.id))continue;deliveredReminderIds.add(event.id);showReminder(event.phase,event.names).catch(()=>{});}sessionStorage.setItem('yakSoksiganReminderIds',JSON.stringify([...deliveredReminderIds].slice(-100)))}
+    enableReminders.addEventListener('click',requestReminderPermission);
+
+    function changeScheduleDate(value){selectedDate=value;localStorage.setItem('yakSoksiganSelectedDate',selectedDate);render();queueSafetyCheck()}
+    $('#previousDate').addEventListener('click',()=>changeScheduleDate(addDays(selectedDate,-1)));
+    $('#nextDate').addEventListener('click',()=>changeScheduleDate(addDays(selectedDate,1)));
+    scheduleDate.addEventListener('change',()=>{if(scheduleDate.value)changeScheduleDate(scheduleDate.value)});
+
+    form.addEventListener('submit',event=>{event.preventDefault();const name=$('#name').value.trim(),amount=$('#amount').value.trim(),times=timesFor(),startDate=$('#startDate').value||todayKey(),durationDays=Math.max(0,Number($('#durationDays').value)||0);if(!name||!times.length)return;const labels={meal:'식후 자동 제안',interval:'정해진 간격',custom:'직접 지정'};meds.push({id:Date.now()+Math.random(),name,amount,times,label:labels[mode],product:null,startDate,durationDays,scheduleSource:'직접 입력'});save();form.reset();$('#startDate').value=todayKey();mode='meal';$$('.mode button').forEach((button,index)=>button.classList.toggle('active',index===0));$$('.conditional').forEach((section,index)=>section.classList.toggle('show',index===0));$('#mealCount').value='3';$('#startTime').value='08:00';$$('#custom input').forEach((input,index)=>input.value=['08:00','13:00','20:00'][index]);$('#name').focus()});
     $('#clear').onclick=()=>{if(meds.length&&confirm('등록한 모든 복약 정보를 지울까요?')){meds=[];save()}};
-    saveProfile();render();renderPhotos();queueSafetyCheck();
+    let deferredInstallPrompt;
+    const installApp=$('#installApp');
+    window.addEventListener('beforeinstallprompt', event=>{event.preventDefault();deferredInstallPrompt=event;installApp.classList.add('show')});
+    installApp.addEventListener('click', async()=>{if(!deferredInstallPrompt)return;deferredInstallPrompt.prompt();await deferredInstallPrompt.userChoice;deferredInstallPrompt=null;installApp.classList.remove('show')});
+    window.addEventListener('appinstalled',()=>{installApp.classList.remove('show');deferredInstallPrompt=null});
+    if('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(error=>console.warn('Service worker registration failed:',error)));
+    $('#startDate').value=todayKey();saveProfile();render();renderPhotos();queueSafetyCheck();updateReminderUi();checkReminders();reminderTimer=setInterval(checkReminders,15000);
   </script>
 </body>
 </html>
