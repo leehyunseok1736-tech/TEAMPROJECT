@@ -3,6 +3,11 @@ import express from 'express';
 import multer from 'multer';
 import { GoogleGenAI } from '@google/genai';
 import { readFileSync } from 'node:fs';
+import {
+  medicineNameSimilarityScore,
+  medicineNameVariants,
+  normalizeExtractedMedicine,
+} from './prescription-utils.js';
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -33,23 +38,43 @@ const prescriptionSchema = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['name', 'item_code', 'manufacturer', 'amount_per_dose', 'frequency_per_day', 'times', 'meal_timing', 'duration'],
+        required: ['name', 'item_code', 'manufacturer', 'dosage_form', 'imprint', 'amount_per_dose', 'frequency_per_day', 'dose_slots', 'times', 'meal_timing', 'duration', 'raw_direction'],
         properties: {
           name: { type: 'string' },
           item_code: { type: 'string' },
           manufacturer: { type: 'string' },
+          dosage_form: { type: 'string' },
+          imprint: { type: 'string' },
           amount_per_dose: { type: 'string' },
           frequency_per_day: { type: 'string' },
+          dose_slots: { type: 'array', items: { type: 'string' } },
           times: { type: 'array', items: { type: 'string' } },
           meal_timing: { type: 'string' },
-          duration: { type: 'string' }
+          duration: { type: 'string' },
+          raw_direction: { type: 'string' }
         }
       }
     }
   }
 };
 
-const extractionPrompt = `You are performing OCR and data structuring only, not medical advice. Read only medication directions visibly written in the supplied Korean prescription or medicine-bag images. Do not infer, calculate, normalize, or invent information. For every unreadable, ambiguous, or absent scalar field, return exactly "확인 필요". item_code means the Korean MFDS item sequence/품목기준코드 only when visibly printed. For times, return an empty array unless an explicit clock time is visible. Never convert meal-based directions into guessed times. Include only medicines supported by the images. Return Korean text that conforms to the supplied JSON schema.`;
+const extractionPrompt = `You are performing high-precision OCR and table reconstruction only, not medical advice.
+
+Read every supplied Korean prescription or medicine-bag image independently, then return every visible medicine row exactly once and in visual order. Before extracting values, identify the row boundaries and column headers. Keep values aligned to the same horizontal medicine row even when the paper is tilted, wrinkled, cropped, or photographed at an angle.
+
+Field rules:
+- name: transcribe the complete printed product name, including strength such as 10mg/10㎎. Do not silently correct an uncertain character.
+- amount_per_dose: only the per-administration amount under 투약량/1회량 or text such as "1정씩", "0.5정씩", "1포씩". Do not use frequency, days, total quantity, or strength.
+- frequency_per_day: only the daily count under 횟수 or text such as "1일 2회"/"2회". In "1정씩 2회 5일분", amount=1정, frequency=2회, duration=5일. Never treat the first digit or the duration as frequency.
+- duration: only 일수/일분/처방 기간. Do not treat duration as a daily count.
+- dose_slots: include only visibly printed or clearly checked dose periods among "아침", "점심", "저녁", "취침 전". For "아침점심저녁식후복용", return all three meal slots.
+- meal_timing: preserve visible directions such as 식전 30분, 식후 30분, 식후 즉시, 식사 직후, 식사와 함께, 식후 1시간, 취침 전, 필요시. A common instruction may be applied to rows only when the layout clearly shows it applies to the entire prescription.
+- times: return only explicit HH:MM clock times. Never convert meal-based directions into clock times.
+- dosage_form and imprint: read only when visible; otherwise "확인 필요".
+- raw_direction: copy the complete visible direction text associated with the row so deterministic post-processing can audit amount/frequency/duration separation.
+- item_code means the Korean MFDS item sequence/품목기준코드 only when visibly printed.
+
+For every unreadable, ambiguous, or absent scalar field, return exactly "확인 필요"; for an absent array return []. Do not infer a medicine or direction from its indication or pill appearance. Return Korean text conforming exactly to the supplied JSON schema.`;
 
 const cache = new Map();
 const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
@@ -57,6 +82,7 @@ const text = value => String(value ?? '').trim();
 const stripHtml = value => text(value).replace(/<[^>]*>/g, ' ').replace(/&nbsp;|&#160;/gi, ' ').replace(/\s+/g, ' ').trim();
 const normalized = value => stripHtml(value)
   .toLowerCase()
+  .replace(/㎎|ｍｇ/g, 'mg')
   .replace(/(\d+(?:\.\d+)?)\s*mg\b/g, '$1밀리그램')
   .replace(/[^0-9a-z가-힣]/g, '');
 const keyName = value => String(value).toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -167,13 +193,7 @@ function normalizeProduct(record) {
 }
 
 function productScore(query, product) {
-  const q = normalized(query);
-  const name = normalized(product.name);
-  if (!q || !name) return 0;
-  if (q === name) return 100;
-  if (name.startsWith(q) || q.startsWith(name)) return 85;
-  if (name.includes(q) || q.includes(name)) return 70;
-  return 0;
+  return medicineNameSimilarityScore(query, product.name);
 }
 
 function mergeProducts(...groups) {
@@ -189,17 +209,6 @@ function mergeProducts(...groups) {
     previous.ingredients = [...ingredientMap.values()];
   });
   return [...merged.values()];
-}
-
-function medicineNameVariants(value) {
-  const original = text(value);
-  if (!original || original === '확인 필요') return [];
-  const compact = original.replace(/\s+/g, '');
-  const koreanUnit = compact.replace(/(\d+(?:\.\d+)?)mg(?=$|[^a-z])/gi, '$1밀리그램');
-  const baseName = koreanUnit
-    .replace(/\d+(?:\.\d+)?밀리그램.*$/i, '')
-    .replace(/\([^)]*\).*$/, '');
-  return [...new Set([original, koreanUnit, baseName].map(text).filter(Boolean))];
 }
 
 async function searchProducts(name, itemCode = '') {
@@ -383,14 +392,19 @@ app.post('/api/analyze-prescription', upload.array('photos', 5), async (request,
       model: process.env.GEMINI_MODEL || 'gemini-3.6-flash',
       contents: [{ role: 'user', parts: [
         { text: extractionPrompt },
-        ...request.files.map(file => ({ inlineData: { data: file.buffer.toString('base64'), mimeType: file.mimetype } }))
+        ...request.files.flatMap((file, index) => [
+          { text: `[IMAGE ${index + 1} START — ${file.originalname}]` },
+          { inlineData: { data: file.buffer.toString('base64'), mimeType: file.mimetype } },
+          { text: `[IMAGE ${index + 1} END]` },
+        ])
       ] }],
       config: { responseMimeType: 'application/json', responseJsonSchema: prescriptionSchema }
     });
     const data = JSON.parse(result.text);
+    const extractedMedicines = asArray(data.medicines).map(normalizeExtractedMedicine);
     const medicines = mfdsKey()
-      ? await Promise.all(asArray(data.medicines).map(enrichMedicine))
-      : asArray(data.medicines).map(medicine => ({ ...medicine, matches: [], matched_product: null, confirmation_required: true, verification_message: 'MFDS_API_KEY가 없어 식약처 품목을 확인하지 못했습니다.' }));
+      ? await Promise.all(extractedMedicines.map(enrichMedicine))
+      : extractedMedicines.map(medicine => ({ ...medicine, matches: [], matched_product: null, confirmation_required: true, verification_message: 'MFDS_API_KEY가 없어 식약처 품목을 확인하지 못했습니다.' }));
     response.json({ medicines, mfdsConfigured: Boolean(mfdsKey()) });
   } catch (error) {
     console.error('Prescription analysis failed:', error);
