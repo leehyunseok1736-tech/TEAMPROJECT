@@ -27,6 +27,18 @@
     .brand-name small { display:block; margin-top:1px; color:#7c8c83; font-size:9px; font-weight:750; letter-spacing:.2px; }
     .tag { color:var(--green); background:var(--mint); padding:7px 12px; border-radius:999px; font-size:12px; font-weight:700; }
     .header-actions { display:flex; align-items:center; gap:8px; }
+    .auth-button { border:1px solid #b9d8c5; color:var(--green); background:#fff; border-radius:999px; padding:7px 11px; cursor:pointer; font-size:12px; font-weight:800; }
+    .auth-button.connected { background:var(--mint); }
+    .auth-dialog { width:min(410px,calc(100% - 32px)); border:0; border-radius:20px; padding:0; box-shadow:0 24px 70px #1d2a3a40; }
+    .auth-dialog::backdrop { background:#1d2a3a80; }
+    .auth-panel { padding:24px; }
+    .auth-panel-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:18px; }
+    .auth-close { border:0; background:transparent; color:var(--muted); cursor:pointer; font-size:22px; }
+    .auth-form { display:grid; gap:12px; }
+    .auth-actions { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    .auth-secondary { border:1px solid var(--green); color:var(--green); background:#fff; border-radius:11px; padding:11px; cursor:pointer; font-weight:800; }
+    .auth-message { min-height:18px; margin:0; color:var(--muted); font-size:12px; line-height:1.5; }
+    .auth-message.error-text { color:var(--red); }
     .install-app { display:none; border:1px solid var(--green); color:var(--green); background:#fff; border-radius:999px; padding:7px 11px; cursor:pointer; font-size:12px; font-weight:800; }
     .install-app.show { display:block; }
     main { max-width:1180px; margin:0 auto; padding:15px 24px 60px; }
@@ -135,7 +147,7 @@
   </style>
 </head>
 <body>
-  <header><div class="brand" aria-label="약속시간, 나의 복약 도우미"><span class="brand-mark" aria-hidden="true"><span class="capsule"><span class="capsule-half"></span><span class="capsule-half"></span></span></span><span class="brand-name"><strong>약</strong>속시간<small>나의 복약 도우미</small></span></div><div class="header-actions"><button class="install-app" id="installApp" type="button">앱 설치</button><span class="tag">공식 정보로 한 번 더 확인</span></div></header>
+  <header><div class="brand" aria-label="약속시간, 나의 복약 도우미"><span class="brand-mark" aria-hidden="true"><span class="capsule"><span class="capsule-half"></span><span class="capsule-half"></span></span></span><span class="brand-name"><strong>약</strong>속시간<small>나의 복약 도우미</small></span></div><div class="header-actions"><button class="install-app" id="installApp" type="button">앱 설치</button><button class="auth-button" id="authButton" type="button">로그인</button><span class="tag">공식 정보로 한 번 더 확인</span></div></header>
   <main>
     <section class="intro"><h1>여러 약도 한눈에,<br>놓치지 않도록.</h1><p>처방전 사진을 읽고 식약처 품목·DUR 정보와 연결해 복약 시간표와 주의사항을 정리합니다.</p></section>
     <div class="grid">
@@ -193,8 +205,23 @@
   </main>
   <footer>이 서비스는 일정 정리와 공공데이터 조회를 돕는 시제품이며 진단·처방을 대신하지 않습니다. 경고가 없다는 결과도 안전을 보장하지 않습니다.</footer>
 
+  <dialog class="auth-dialog" id="authDialog">
+    <div class="auth-panel">
+      <div class="auth-panel-head"><div><h2>내 복약 정보 동기화</h2><p class="hint">로그인하면 등록한 약과 복용 기록을 안전하게 저장합니다.</p></div><button class="auth-close" id="authClose" type="button" aria-label="닫기">×</button></div>
+      <form class="auth-form" id="authForm">
+        <label>이메일<input id="authEmail" type="email" autocomplete="email" required></label>
+        <label>비밀번호<input id="authPassword" type="password" autocomplete="current-password" minlength="6" required></label>
+        <div class="auth-actions"><button class="primary" id="signInButton" type="submit">로그인</button><button class="auth-secondary" id="signUpButton" type="button">회원가입</button></div>
+        <button class="auth-secondary" id="resendSignUpButton" type="button">인증 이메일 재전송</button>
+        <p class="auth-message" id="authMessage" aria-live="polite"></p>
+      </form>
+    </div>
+  </dialog>
+
+  <script src="/vendor/supabase.js"></script>
   <script type="module">
     import { suggestDoseTimes } from './prescription-utils.js';
+    import { createSupabaseData } from './supabase-data.js';
     const $ = selector => document.querySelector(selector);
     const $$ = selector => [...document.querySelectorAll(selector)];
     const form=$('#medForm'), schedule=$('#schedule'), notice=$('#notice');
@@ -202,6 +229,7 @@
     const warningList=$('#warningList'), safetyStatus=$('#safetyStatus'), safetyBadge=$('#safetyBadge');
     const reminderStatus=$('#reminderStatus'), enableReminders=$('#enableReminders');
     const scheduleDate=$('#scheduleDate'), scheduleHeading=$('#scheduleHeading'), dateSummary=$('#dateSummary');
+    const authButton=$('#authButton'), authDialog=$('#authDialog'), authForm=$('#authForm'), authMessage=$('#authMessage');
     const unknown='확인 필요';
     const escapeHtml=value=>String(value??'').replace(/[&<>'"]/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
     const validTime=value=>/^([01]\d|2[0-3]):[0-5]\d$/.test(value);
@@ -217,6 +245,7 @@
     let mode='meal', meds=JSON.parse(localStorage.getItem('yakSoksigan')||'[]'), photos=[], analyzedMedicines=[], safetyTimer, safetyVersion=0, reminderTimer, lastReminderCheck=Date.now();
     let selectedDate=localStorage.getItem('yakSoksiganSelectedDate')||todayKey();
     let doseRecords=JSON.parse(localStorage.getItem('yakSoksiganDoseRecords')||'{}');
+    let supabaseData=null, cloudSyncTimer;
     const deliveredReminderIds=new Set(JSON.parse(sessionStorage.getItem('yakSoksiganReminderIds')||'[]'));
 
     let migrated=false;
@@ -229,7 +258,11 @@
 
     ['patientAge','breakfastTime','lunchTime','dinnerTime','bedtimeTime'].forEach(id=>{if(storedProfile[id])$('#'+id).value=storedProfile[id];$('#'+id).addEventListener('change',()=>{saveProfile();queueSafetyCheck()})});
     function profile(){return{patientAge:$('#patientAge').value,breakfastTime:$('#breakfastTime').value,lunchTime:$('#lunchTime').value,dinnerTime:$('#dinnerTime').value,bedtimeTime:$('#bedtimeTime').value}}
-    function saveProfile(){localStorage.setItem('yakSoksiganProfile',JSON.stringify(profile()))}
+    function applyProfile(value){if(!value)return;Object.entries(value).forEach(([id,inputValue])=>{const input=$('#'+id);if(input&&inputValue!==''&&inputValue!=null)input.value=inputValue})}
+    function persistLocalState(){localStorage.setItem('yakSoksiganProfile',JSON.stringify(profile()));localStorage.setItem('yakSoksigan',JSON.stringify(meds));localStorage.setItem('yakSoksiganDoseRecords',JSON.stringify(doseRecords))}
+    function cloudState(){return{profile:profile(),medications:meds,doseRecords}}
+    function queueCloudSync(){clearTimeout(cloudSyncTimer);if(!supabaseData?.currentUser())return;cloudSyncTimer=setTimeout(async()=>{const synced=await supabaseData.syncState(cloudState());if(synced){persistLocalState();render()}},250)}
+    function saveProfile(){localStorage.setItem('yakSoksiganProfile',JSON.stringify(profile()));queueCloudSync()}
 
     function renderPhotos(){
       photoCount.textContent=photos.length+' / 5장';analyzeButton.disabled=!photos.length;
@@ -281,8 +314,8 @@
       if(!ordered.length)schedule.innerHTML='<div class="empty"><div class="circle">◷</div><strong>'+escapeHtml(dateLabel(selectedDate))+'에는 등록된 복약이 없어요</strong><br><span>다른 날짜를 확인하거나 왼쪽에서 약을 추가해 보세요.</span></div>';
       else schedule.innerHTML='<div class="timeline">'+ordered.map(time=>'<div class="slot"><div class="slot-time">'+time+'</div>'+slots[time].map(item=>{const key=doseKey(item,time),record=doseRecords[key],state=record?.status;const actions=state?'<span class="dose-state '+(state==='taken'?'taken':'skipped')+'">'+(state==='taken'?'복용 완료':'건너뜀')+'</span><button class="dose-button undo" type="button" data-dose-key="'+key+'" data-dose-status="clear">되돌리기</button>':'<button class="dose-button" type="button" data-dose-key="'+key+'" data-dose-status="taken">복용함</button><button class="dose-button skip" type="button" data-dose-key="'+key+'" data-dose-status="skipped">건너뜀</button>';return '<div class="medicine"><div><strong>'+escapeHtml(item.name)+'</strong><small>'+escapeHtml(item.amount||'복용량 미입력')+' · '+escapeHtml(item.label||'')+(item.scheduleSource?'<br>'+escapeHtml(item.scheduleSource):'')+'<br>'+escapeHtml(periodDescription(item))+'</small></div><div class="medicine-actions">'+actions+'<button class="delete" aria-label="약 삭제" data-id="'+item.id+'">×</button></div></div>'}).join('')+'</div>').join('')+'</div>';
       const close=ordered.some((time,index)=>index&&toMin(time)-toMin(ordered[index-1])<60);notice.textContent=close?'복용 시간이 1시간 이내로 가까운 항목이 있습니다. 이것만으로 상호작용을 판단할 수 없으니 처방 지시를 다시 확인하세요.':'';notice.classList.toggle('show',close);
-      $$('.delete').forEach(button=>button.onclick=()=>{meds=meds.filter(med=>med.id!==+button.dataset.id);save()});
-      $$('[data-dose-key]').forEach(button=>button.onclick=()=>{const key=button.dataset.doseKey,status=button.dataset.doseStatus;if(status==='clear')delete doseRecords[key];else doseRecords[key]={status,updatedAt:new Date().toISOString()};localStorage.setItem('yakSoksiganDoseRecords',JSON.stringify(doseRecords));render()});
+      $$('.delete').forEach(button=>button.onclick=()=>{meds=meds.filter(med=>String(med.id)!==button.dataset.id);save()});
+      $$('[data-dose-key]').forEach(button=>button.onclick=()=>{const key=button.dataset.doseKey,status=button.dataset.doseStatus;if(status==='clear')delete doseRecords[key];else doseRecords[key]={status,updatedAt:new Date().toISOString()};localStorage.setItem('yakSoksiganDoseRecords',JSON.stringify(doseRecords));render();queueCloudSync()});
     }
 
     function renderSafety(data){
@@ -296,10 +329,10 @@
     async function checkSafety(){
       const version=++safetyVersion, active=activeMeds();if(!active.length){safetyBadge.textContent='대기';safetyBadge.className='match-badge';safetyStatus.textContent=dateLabel(selectedDate)+'에는 점검할 복용 약이 없습니다.';warningList.innerHTML='';return}
       safetyBadge.textContent='조회 중';safetyStatus.textContent='식약처 품목·DUR 정보를 확인하고 있습니다…';warningList.innerHTML='';
-      try{const response=await fetch('/api/check-safety',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({age:Number(profile().patientAge),medicines:active.map(({id,name,product})=>({id,name,itemSeq:product?.itemSeq,product}))})});const data=await response.json();if(version!==safetyVersion)return;if(!response.ok)throw new Error(data.error||'안전정보 조회 실패');(data.medicines||[]).forEach(result=>{const med=meds.find(item=>String(item.id)===String(result.id));if(med&&result.product)med.product=result.product});localStorage.setItem('yakSoksigan',JSON.stringify(meds));renderSafety(data)}catch(error){if(version!==safetyVersion)return;safetyBadge.textContent='확인 실패';safetyBadge.className='match-badge';safetyStatus.textContent=error.message;warningList.innerHTML='<article class="warning"><strong>전문가 확인이 필요합니다</strong>공식 데이터 조회가 끝나지 않았으므로 이 화면을 안전 판정으로 사용하지 마세요.</article>'}
+      try{const response=await fetch('/api/check-safety',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({age:Number(profile().patientAge),medicines:active.map(({id,name,product})=>({id,name,itemSeq:product?.itemSeq,product}))})});const data=await response.json();if(version!==safetyVersion)return;if(!response.ok)throw new Error(data.error||'안전정보 조회 실패');(data.medicines||[]).forEach(result=>{const med=meds.find(item=>String(item.id)===String(result.id));if(med&&result.product)med.product=result.product});localStorage.setItem('yakSoksigan',JSON.stringify(meds));queueCloudSync();renderSafety(data)}catch(error){if(version!==safetyVersion)return;safetyBadge.textContent='확인 실패';safetyBadge.className='match-badge';safetyStatus.textContent=error.message;warningList.innerHTML='<article class="warning"><strong>전문가 확인이 필요합니다</strong>공식 데이터 조회가 끝나지 않았으므로 이 화면을 안전 판정으로 사용하지 마세요.</article>'}
     }
     function queueSafetyCheck(){clearTimeout(safetyTimer);safetyTimer=setTimeout(checkSafety,350)}
-    function save(){localStorage.setItem('yakSoksigan',JSON.stringify(meds));render();queueSafetyCheck();lastReminderCheck=Date.now()}
+    function save(){localStorage.setItem('yakSoksigan',JSON.stringify(meds));render();queueSafetyCheck();queueCloudSync();lastReminderCheck=Date.now()}
 
     function updateReminderUi(){
       if(!('Notification' in window)){reminderStatus.textContent='이 브라우저는 알림을 지원하지 않습니다.';enableReminders.disabled=true;return}
@@ -321,13 +354,29 @@
 
     form.addEventListener('submit',event=>{event.preventDefault();const name=$('#name').value.trim(),amount=$('#amount').value.trim(),times=timesFor(),startDate=$('#startDate').value||todayKey(),durationDays=Math.max(0,Number($('#durationDays').value)||0);if(!name||!times.length)return;const labels={meal:'식후 자동 제안',interval:'정해진 간격',custom:'직접 지정'};meds.push({id:Date.now()+Math.random(),name,amount,times,label:labels[mode],product:null,startDate,durationDays,scheduleSource:'직접 입력'});save();form.reset();$('#startDate').value=todayKey();mode='meal';$$('.mode button').forEach((button,index)=>button.classList.toggle('active',index===0));$$('.conditional').forEach((section,index)=>section.classList.toggle('show',index===0));$('#mealCount').value='3';$('#startTime').value='08:00';$$('#custom input').forEach((input,index)=>input.value=['08:00','13:00','20:00'][index]);$('#name').focus()});
     $('#clear').onclick=()=>{if(meds.length&&confirm('등록한 모든 복약 정보를 지울까요?')){meds=[];save()}};
+
+    function setAuthUser(user){const anonymous=Boolean(user?.is_anonymous);authButton.textContent=anonymous?'DB 자동 저장 중':user?(user.email||'로그인됨'):'연결 중';authButton.classList.toggle('connected',Boolean(user));authButton.disabled=anonymous;authButton.title=anonymous?'이 브라우저의 익명 사용자 ID로 Supabase에 자동 저장합니다.':user?'클릭하면 로그아웃합니다.':'Supabase에 연결하고 있습니다.'}
+    function receiveCloudData(data){if(data.profile)applyProfile(data.profile);meds=data.medications||[];doseRecords=data.doseRecords||{};persistLocalState();render();queueSafetyCheck()}
+    function showAuthError(error){console.error('Supabase:',error);authMessage.textContent=error?.message||'데이터 동기화 중 오류가 발생했습니다.';authMessage.className='auth-message error-text';authButton.title=authMessage.textContent}
+    function localCloudSnapshot(){return{profile:profile(),medications:meds,doseRecords,hasLocalData:Boolean(localStorage.getItem('yakSoksiganProfile'))||meds.length>0||Object.keys(doseRecords).length>0}}
+    async function initializeSupabase(){
+      try{const snapshot=localCloudSnapshot();supabaseData=await createSupabaseData({onAuthChange:setAuthUser,onData:receiveCloudData,onError:showAuthError});await supabaseData.refresh(snapshot);if(!supabaseData.currentUser()){const result=await supabaseData.signInAnonymously();if(result.error)throw result.error;await supabaseData.refresh(snapshot)}}
+      catch(error){showAuthError(error);authButton.textContent='동기화 설정 필요';authButton.disabled=true}
+    }
+    authButton.addEventListener('click',async()=>{if(!supabaseData)return;if(supabaseData.currentUser()){if(!confirm('로그아웃할까요? 이 기기의 복약 데이터도 화면에서 지워집니다.'))return;const result=await supabaseData.signOut();if(result.error)return showAuthError(result.error);meds=[];doseRecords={};localStorage.removeItem('yakSoksiganProfile');localStorage.removeItem('yakSoksigan');localStorage.removeItem('yakSoksiganDoseRecords');applyProfile({patientAge:'65',breakfastTime:'08:00',lunchTime:'13:00',dinnerTime:'19:00',bedtimeTime:'22:00'});render();return}authMessage.textContent='';authMessage.className='auth-message';authDialog.showModal()});
+    $('#authClose').addEventListener('click',()=>authDialog.close());
+    authDialog.addEventListener('click',event=>{if(event.target===authDialog)authDialog.close()});
+    authForm.addEventListener('submit',async event=>{event.preventDefault();authMessage.textContent='로그인 중입니다…';authMessage.className='auth-message';const snapshot=localCloudSnapshot();const result=await supabaseData.signIn($('#authEmail').value.trim(),$('#authPassword').value);if(result.error)return showAuthError(result.error);await supabaseData.refresh(snapshot);authDialog.close()});
+    $('#signUpButton').addEventListener('click',async()=>{if(!authForm.reportValidity())return;authMessage.textContent='회원가입 중입니다…';authMessage.className='auth-message';const snapshot=localCloudSnapshot();const result=await supabaseData.signUp($('#authEmail').value.trim(),$('#authPassword').value);if(result.error)return showAuthError(result.error);if(result.data.session){await supabaseData.refresh(snapshot);authDialog.close()}else{authMessage.textContent='확인 이메일을 보냈습니다. 이메일의 링크를 누른 뒤 로그인하세요.'}});
+    $('#resendSignUpButton').addEventListener('click',async()=>{const email=$('#authEmail').value.trim();if(!email||!$('#authEmail').checkValidity()){authMessage.textContent='가입에 사용한 이메일을 먼저 입력하세요.';authMessage.className='auth-message error-text';return}authMessage.textContent='인증 이메일을 다시 보내는 중입니다…';authMessage.className='auth-message';const result=await supabaseData.resendSignUp(email);if(result.error)return showAuthError(result.error);authMessage.textContent='새 인증 이메일을 보냈습니다. 가장 최근 메일의 링크를 눌러주세요.'});
+
     let deferredInstallPrompt;
     const installApp=$('#installApp');
     window.addEventListener('beforeinstallprompt', event=>{event.preventDefault();deferredInstallPrompt=event;installApp.classList.add('show')});
     installApp.addEventListener('click', async()=>{if(!deferredInstallPrompt)return;deferredInstallPrompt.prompt();await deferredInstallPrompt.userChoice;deferredInstallPrompt=null;installApp.classList.remove('show')});
     window.addEventListener('appinstalled',()=>{installApp.classList.remove('show');deferredInstallPrompt=null});
     if('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(error=>console.warn('Service worker registration failed:',error)));
-    $('#startDate').value=todayKey();saveProfile();render();renderPhotos();queueSafetyCheck();updateReminderUi();checkReminders();reminderTimer=setInterval(checkReminders,15000);
+    $('#startDate').value=todayKey();render();renderPhotos();queueSafetyCheck();updateReminderUi();checkReminders();reminderTimer=setInterval(checkReminders,15000);initializeSupabase();
   </script>
 </body>
 </html>

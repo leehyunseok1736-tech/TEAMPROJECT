@@ -7,8 +7,10 @@
       "config": {
         "includeFiles": [
           "index.html",
+          "supabase-data.js",
           "manifest.webmanifest",
           "sw.js",
+          "node_modules/@supabase/supabase-js/dist/umd/supabase.js",
           "icons/**"
         ]
       }

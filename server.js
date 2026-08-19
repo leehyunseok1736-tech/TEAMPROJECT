@@ -12,6 +12,7 @@ import {
 const app = express();
 const port = process.env.PORT || 3000;
 const indexHtml = readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+const supabaseBrowserJs = readFileSync(new URL('./node_modules/@supabase/supabase-js/dist/umd/supabase.js', import.meta.url), 'utf8');
 const MFDS_BASE_URL = process.env.MFDS_BASE_URL || 'https://apis.data.go.kr/1471000';
 const MFDS_PATHS = {
   product: process.env.MFDS_PRODUCT_PATH || '/DrugPrdtPrmsnInfoService07/getDrugPrdtPrmsnInq07',
@@ -376,11 +377,23 @@ async function resolveForSafety(input) {
 }
 
 app.use(express.json({ limit: '300kb' }));
+app.get('/vendor/supabase.js', (_request, response) => response.type('application/javascript').send(supabaseBrowserJs));
+app.get('/api/supabase-config', (_request, response) => {
+  const url = process.env.SUPABASE_URL?.trim();
+  const publishableKey = process.env.SUPABASE_PUBLISHABLE_KEY?.trim();
+  if (!url || !publishableKey) {
+    return response.status(503).json({ configured: false, error: 'Supabase 환경 변수가 설정되지 않았습니다.' });
+  }
+  response.json({ configured: true, url, publishableKey });
+});
 app.use(express.static('.'));
 app.get('/', (_request, response) => response.type('html').send(indexHtml));
 
 app.get('/api/health', (_request, response) => response.json({
-  ok: true, geminiConfigured: Boolean(process.env.GEMINI_API_KEY), mfdsConfigured: Boolean(mfdsKey())
+  ok: true,
+  geminiConfigured: Boolean(process.env.GEMINI_API_KEY),
+  mfdsConfigured: Boolean(mfdsKey()),
+  supabaseConfigured: Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_PUBLISHABLE_KEY)
 }));
 
 app.post('/api/analyze-prescription', upload.array('photos', 5), async (request, response) => {
